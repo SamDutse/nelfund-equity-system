@@ -1,3 +1,4 @@
+from fastapi.middleware.cors import CORSMiddleware
 import os
 from fastapi import FastAPI
 import joblib
@@ -8,6 +9,13 @@ app = FastAPI(title="NELFUND Equity Selection API")
 # Load trained model
 model = joblib.load("model/nelfund_model.pkl")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # restrict later if needed
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def home():
@@ -88,16 +96,24 @@ def select_beneficiaries(payload: dict):
     orphan_ratio = orphan_count / total_selected if total_selected else 0
 
     return {
-        "total_selected": total_selected,
-        "total_spent": total_spent,
-        "remaining_budget": school_budget - total_spent,
-        "fairness_policy_used": fairness_policy,
-        "fairness_metrics": {
-            "disability_ratio": disability_ratio,
-            "orphan_ratio": orphan_ratio
-        },
-        "selected_students": selected
-    }
+    "selection_summary": {
+        "budget": school_budget,
+        "spent": total_spent,
+        "remaining": school_budget - total_spent,
+        "total_applicants": len(applications),
+        "total_selected": total_selected
+    },
+    "fairness_policy_used": fairness_policy,
+    "fairness_metrics": {
+        "disability_ratio": disability_ratio,
+        "orphan_ratio": orphan_ratio
+    },
+    "selected_students": selected
+}
+
+@app.get("/health")
+def health():
+    return {"status": "healthy", "model_loaded": True}
 
 
 if __name__ == "__main__":
