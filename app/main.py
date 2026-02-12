@@ -31,6 +31,17 @@ def select_beneficiaries(payload: dict):
     school_budget = payload["school_budget"]
     applications = payload["applications"]
 
+    # Default fairness policy
+    fairness_policy = payload.get("fairness_policy", {
+        "min_disability_ratio": 0.1,
+        "min_orphan_ratio": 0.15,
+        "max_state_ratio": 0.4
+    })
+
+    min_disability_ratio = fairness_policy["min_disability_ratio"]
+    min_orphan_ratio = fairness_policy["min_orphan_ratio"]
+    max_state_ratio = fairness_policy["max_state_ratio"]
+
     df = pd.DataFrame(applications)
 
     # Score applicants
@@ -42,7 +53,6 @@ def select_beneficiaries(payload: dict):
     selected = []
     total_spent = 0
 
-    # Fairness counters
     disability_count = 0
     orphan_count = 0
     state_counts = {}
@@ -54,15 +64,16 @@ def select_beneficiaries(payload: dict):
         if total_spent + tuition > school_budget:
             continue
 
-        # State cap: max 40%
         current_total = len(selected) if len(selected) > 0 else 1
-        if state_counts.get(state, 0) / current_total > 0.4:
+
+        # State cap enforcement
+        if state_counts.get(state, 0) / current_total > max_state_ratio:
             continue
 
         selected.append(row.to_dict())
         total_spent += tuition
 
-        # Update fairness counters
+        # Update counters
         if row["disability_status"] == 1:
             disability_count += 1
 
@@ -71,7 +82,6 @@ def select_beneficiaries(payload: dict):
 
         state_counts[state] = state_counts.get(state, 0) + 1
 
-    # Post-selection fairness check
     total_selected = len(selected)
 
     disability_ratio = disability_count / total_selected if total_selected else 0
@@ -81,10 +91,14 @@ def select_beneficiaries(payload: dict):
         "total_selected": total_selected,
         "total_spent": total_spent,
         "remaining_budget": school_budget - total_spent,
-        "disability_ratio": disability_ratio,
-        "orphan_ratio": orphan_ratio,
+        "fairness_policy_used": fairness_policy,
+        "fairness_metrics": {
+            "disability_ratio": disability_ratio,
+            "orphan_ratio": orphan_ratio
+        },
         "selected_students": selected
     }
+
 
 if __name__ == "__main__":
     import uvicorn
